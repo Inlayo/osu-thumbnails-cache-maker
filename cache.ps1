@@ -7,7 +7,7 @@
 
     Directory layout:
 
-        osu!\
+    osu!\
         ├── Songs\
         ├── Data\
         │   └── bt\
@@ -15,32 +15,39 @@
 
     Generates:
 
-        Data\bt\<BeatmapSetID>.jpg
-        Data\bt\<BeatmapSetID>l.jpg
+    Data\bt\<BeatmapSetID>.jpg
+    Data\bt\<BeatmapSetID>l.jpg
 
     Sizes:
 
-        <ID>.jpg   = 80x60
-        <ID>l.jpg  = 160x120
+    <ID>.jpg   = 80x60
+    <ID>l.jpg  = 160x120
 
     BeatmapSetID detection priority:
 
-        1. BeatmapSetID from .osu file
-        2. Leading number from mapset folder name
-        3. No SetID
+    1. BeatmapSetID from .osu file
+    2. Leading number from mapset folder name
+    3. No SetID
+
+    Background selection:
+
+    When a mapset contains multiple beatmaps,
+    the background from the beatmap with the LOWEST BeatmapID
+    is used for the thumbnail.
 
     Example:
 
-        10143 IOSYS - Marisa wa Taihen na Kanbu de Tomatte Ikimashita
+    BeatmapID 100001 -> background A
+    BeatmapID 100002 -> background B
+    BeatmapID 100003 -> background C
 
-        -> BeatmapSetID = 10143
-
-    The folder-name fallback is only used when no valid
-    BeatmapSetID (> 0) exists in the .osu files.
+    Result:
+    background A is used.
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
 
 # ------------------------------------------------------------
 # Configuration
@@ -55,6 +62,7 @@ $LargeHeight = 120
 # JPEG quality.
 # 90 is a good compromise between size and quality.
 $JpegQuality = 90
+
 
 # ------------------------------------------------------------
 # Locate osu! directory
@@ -84,6 +92,7 @@ if (-not (Test-Path -LiteralPath $SongsDirectory -PathType Container)) {
     exit 1
 }
 
+
 # Create Data\bt if necessary.
 if (-not (Test-Path -LiteralPath $ThumbnailDirectory -PathType Container)) {
 
@@ -94,20 +103,26 @@ if (-not (Test-Path -LiteralPath $ThumbnailDirectory -PathType Container)) {
     New-Item -ItemType Directory -Path $ThumbnailDirectory -Force | Out-Null
 }
 
+
 # ------------------------------------------------------------
 # Load System.Drawing
 # ------------------------------------------------------------
 
 try {
+
     Add-Type -AssemblyName System.Drawing
+
 }
 catch {
+
     Write-Host ""
     Write-Host "Unable to load System.Drawing." -ForegroundColor Red
     Write-Host $_.Exception.Message
     Write-Host ""
+
     exit 1
 }
+
 
 # ------------------------------------------------------------
 # Helper: JPEG encoder
@@ -128,6 +143,7 @@ function Get-JpegCodec {
 }
 
 $JpegCodec = Get-JpegCodec
+
 
 # ------------------------------------------------------------
 # Helper: create JPEG encoder parameters
@@ -151,6 +167,7 @@ function New-JpegParameters {
     return $parameters
 }
 
+
 # ------------------------------------------------------------
 # Helper: safely dispose image
 # ------------------------------------------------------------
@@ -170,6 +187,7 @@ function Dispose-Image {
         }
     }
 }
+
 
 # ------------------------------------------------------------
 # Helper: determine whether an extension is an image
@@ -201,6 +219,7 @@ function Test-ImageExtension {
     }
 }
 
+
 # ------------------------------------------------------------
 # Helper: find background references in .osu file
 # ------------------------------------------------------------
@@ -216,6 +235,7 @@ function Get-BackgroundReferences {
     $inEvents = $false
 
     try {
+
         $lines = [System.IO.File]::ReadAllLines(
             $OsuFile,
             [System.Text.Encoding]::UTF8
@@ -255,6 +275,7 @@ function Get-BackgroundReferences {
         # 0,0,"background.jpg",0,0
         #
         # We only care about the quoted filename.
+
         if ($trimmed -match '^\s*0\s*,\s*0\s*,\s*"([^"]+)"') {
 
             $filename = $Matches[1]
@@ -280,6 +301,7 @@ function Get-BackgroundReferences {
     return $results
 }
 
+
 # ------------------------------------------------------------
 # Helper: normalize filename from osu! Events
 # ------------------------------------------------------------
@@ -301,6 +323,7 @@ function Convert-OsuRelativePath {
     return $normalized
 }
 
+
 # ------------------------------------------------------------
 # Helper: get BeatmapSetID from an .osu file
 # ------------------------------------------------------------
@@ -312,25 +335,60 @@ function Get-BeatmapSetId {
     )
 
     try {
+
         $lines = [System.IO.File]::ReadAllLines(
             $OsuFile,
             [System.Text.Encoding]::UTF8
         )
     }
     catch {
+
         $lines = [System.IO.File]::ReadAllLines($OsuFile)
     }
 
     foreach ($line in $lines) {
 
         if ($line -match '^\s*BeatmapSetID\s*:\s*(-?\d+)') {
-
             return [int64]$Matches[1]
         }
     }
 
     return $null
 }
+
+
+# ------------------------------------------------------------
+# Helper: get BeatmapID from an .osu file
+# ------------------------------------------------------------
+
+function Get-BeatmapId {
+
+    param(
+        [string]$OsuFile
+    )
+
+    try {
+
+        $lines = [System.IO.File]::ReadAllLines(
+            $OsuFile,
+            [System.Text.Encoding]::UTF8
+        )
+    }
+    catch {
+
+        $lines = [System.IO.File]::ReadAllLines($OsuFile)
+    }
+
+    foreach ($line in $lines) {
+
+        if ($line -match '^\s*BeatmapID\s*:\s*(\d+)') {
+            return [int64]$Matches[1]
+        }
+    }
+
+    return $null
+}
+
 
 # ------------------------------------------------------------
 # Helper: get BeatmapSetID from mapset directory name
@@ -380,12 +438,14 @@ function Get-BeatmapSetIdFromFolderName {
             }
         }
         catch {
+
             return $null
         }
     }
 
     return $null
 }
+
 
 # ------------------------------------------------------------
 # Helper: get all valid SetIDs from a mapset directory
@@ -425,6 +485,7 @@ function Get-MapsetIdInformation {
         }
     }
 
+
     # --------------------------------------------------------
     # Normal case:
     #
@@ -456,20 +517,13 @@ function Get-MapsetIdInformation {
         }
     }
 
+
     # --------------------------------------------------------
     # Fallback:
     #
     # No valid BeatmapSetID exists in any .osu file.
     #
     # Try to get the ID from the mapset folder name.
-    #
-    # Example:
-    #
-    #   10143 IOSYS - Marisa wa Taihen na Kanbu...
-    #
-    # becomes:
-    #
-    #   10143
     # --------------------------------------------------------
 
     $folderId = Get-BeatmapSetIdFromFolderName $MapsetDirectory
@@ -488,6 +542,7 @@ function Get-MapsetIdInformation {
         }
     }
 
+
     # --------------------------------------------------------
     # No valid ID anywhere.
     # --------------------------------------------------------
@@ -502,26 +557,135 @@ function Get-MapsetIdInformation {
     }
 }
 
+
 # ------------------------------------------------------------
 # Helper: locate the background image for a mapset
+#
+# IMPORTANT:
+#
+# If multiple beatmaps exist in the same mapset,
+# the beatmap with the LOWEST BeatmapID is selected first.
+#
+# Example:
+#
+#   BeatmapID 500 -> background A
+#   BeatmapID 300 -> background B
+#   BeatmapID 400 -> background C
+#
+# Result:
+#
+#   background B
 # ------------------------------------------------------------
 
 function Find-MapsetBackground {
 
     param(
         [System.IO.DirectoryInfo]$MapsetDirectory,
+
         [System.IO.FileInfo[]]$OsuFiles
     )
 
-    # We inspect every difficulty.
+
+    # --------------------------------------------------------
+    # Collect BeatmapID information from every .osu file.
+    # --------------------------------------------------------
+
+    $beatmapFiles = New-Object System.Collections.Generic.List[object]
+
+    foreach ($osuFile in $OsuFiles) {
+
+        $beatmapId = Get-BeatmapId $osuFile.FullName
+
+        if ($null -eq $beatmapId) {
+            continue
+        }
+
+        if ($beatmapId -le 0) {
+            continue
+        }
+
+        $beatmapFiles.Add(
+            [PSCustomObject]@{
+                File      = $osuFile
+                BeatmapID = $beatmapId
+            }
+        )
+    }
+
+
+    # --------------------------------------------------------
+    # Sort by BeatmapID.
     #
-    # This is important for maps where:
+    # Lowest BeatmapID comes first.
+    # --------------------------------------------------------
+
+    $sortedBeatmaps = @(
+        $beatmapFiles |
+            Sort-Object BeatmapID
+    )
+
+
+    # --------------------------------------------------------
+    # Try backgrounds in BeatmapID order.
+    # --------------------------------------------------------
+
+    foreach ($beatmap in $sortedBeatmaps) {
+
+        $osuFile = $beatmap.File
+
+        $backgrounds = Get-BackgroundReferences $osuFile.FullName
+
+        foreach ($background in $backgrounds) {
+
+            $relativePath = Convert-OsuRelativePath $background
+
+            $candidate = Join-Path `
+                $MapsetDirectory.FullName `
+                $relativePath
+
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+
+                try {
+
+                    # Make sure the image can actually be decoded.
+                    $testImage = [System.Drawing.Image]::FromFile(
+                        $candidate
+                    )
+
+                    $width  = $testImage.Width
+                    $height = $testImage.Height
+
+                    $testImage.Dispose()
+
+                    if ($width -gt 0 -and $height -gt 0) {
+
+                        return [PSCustomObject]@{
+                            Path        = $candidate
+                            Relative    = $relativePath
+                            SourceOsu   = $osuFile.FullName
+                            BeatmapID   = $beatmap.BeatmapID
+                            Width       = $width
+                            Height      = $height
+                        }
+                    }
+                }
+                catch {
+
+                    # Background exists but cannot be decoded.
+                    continue
+                }
+            }
+        }
+    }
+
+
+    # --------------------------------------------------------
+    # Fallback:
     #
-    # Easy.osu   -> SetID -1
-    # Normal.osu -> SetID 123456
-    # Hard.osu   -> SetID 123456
+    # Some malformed maps may not have a BeatmapID.
     #
-    # or where one difficulty has a different / broken background.
+    # In that case, inspect .osu files in their original order.
+    # --------------------------------------------------------
 
     foreach ($osuFile in $OsuFiles) {
 
@@ -539,8 +703,9 @@ function Find-MapsetBackground {
 
                 try {
 
-                    # Make sure the image can actually be decoded.
-                    $testImage = [System.Drawing.Image]::FromFile($candidate)
+                    $testImage = [System.Drawing.Image]::FromFile(
+                        $candidate
+                    )
 
                     $width  = $testImage.Width
                     $height = $testImage.Height
@@ -553,6 +718,7 @@ function Find-MapsetBackground {
                             Path        = $candidate
                             Relative    = $relativePath
                             SourceOsu   = $osuFile.FullName
+                            BeatmapID   = $null
                             Width       = $width
                             Height      = $height
                         }
@@ -560,18 +726,20 @@ function Find-MapsetBackground {
                 }
                 catch {
 
-                    # Image exists but cannot be decoded.
                     continue
                 }
             }
         }
     }
 
+
     # --------------------------------------------------------
-    # Fallback:
+    # Final fallback:
     #
     # Some malformed maps may not have a usable [Events]
-    # background declaration. Look for image files directly.
+    # background declaration.
+    #
+    # Look for image files directly.
     # --------------------------------------------------------
 
     try {
@@ -606,12 +774,14 @@ function Find-MapsetBackground {
                             $MapsetDirectory.FullName.Length
                         ).TrimStart('\')
                         SourceOsu   = $null
+                        BeatmapID   = $null
                         Width       = $width
                         Height      = $height
                     }
                 }
             }
             catch {
+
                 continue
             }
         }
@@ -619,8 +789,10 @@ function Find-MapsetBackground {
     catch {
     }
 
+
     return $null
 }
+
 
 # ------------------------------------------------------------
 # Helper: create a 4:3 thumbnail
@@ -721,6 +893,7 @@ function New-ThumbnailImage {
     return $bitmap
 }
 
+
 # ------------------------------------------------------------
 # Helper: write JPEG atomically
 # ------------------------------------------------------------
@@ -736,6 +909,7 @@ function Save-JpegAtomic {
     $directory = Split-Path -Parent $OutputPath
 
     if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
@@ -788,6 +962,7 @@ function Save-JpegAtomic {
     }
 }
 
+
 # ------------------------------------------------------------
 # Helper: validate existing thumbnail
 # ------------------------------------------------------------
@@ -834,6 +1009,7 @@ function Test-Thumbnail {
         }
     }
 }
+
 
 # ------------------------------------------------------------
 # Select operation
@@ -886,6 +1062,7 @@ switch ($mode) {
     }
 }
 
+
 # ------------------------------------------------------------
 # Log files
 # ------------------------------------------------------------
@@ -923,6 +1100,7 @@ $FolderIdLog = Join-Path `
     $LogDirectory `
     "folder_name_setid_$timestamp.txt"
 
+
 # ------------------------------------------------------------
 # Statistics
 # ------------------------------------------------------------
@@ -949,6 +1127,7 @@ $Stats = [ordered]@{
 
 $StartTime = Get-Date
 
+
 # ------------------------------------------------------------
 # Find mapset directories
 # ------------------------------------------------------------
@@ -966,6 +1145,7 @@ $mapsetDirectories = Get-ChildItem `
 $totalDirectories = $mapsetDirectories.Count
 
 $currentDirectoryIndex = 0
+
 
 # ------------------------------------------------------------
 # Process every directory containing .osu files
@@ -988,6 +1168,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
     $Stats.MapsetsScanned++
     $Stats.BeatmapsScanned += $osuFiles.Count
 
+
     # --------------------------------------------------------
     # Progress
     # --------------------------------------------------------
@@ -1006,6 +1187,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
         -Activity "Generating osu! thumbnails" `
         -Status "$currentDirectoryIndex / $totalDirectories : $($mapsetDirectory.Name)" `
         -PercentComplete $percent
+
 
     # --------------------------------------------------------
     # Determine SetID
@@ -1039,6 +1221,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
             continue
         }
 
+
         # ----------------------------------------------------
         # Record folder-name fallback
         # ----------------------------------------------------
@@ -1052,6 +1235,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 -Value "$setId`t$($mapsetDirectory.FullName)"
         }
 
+
         # ----------------------------------------------------
         # Handle -1 SetID
         # ----------------------------------------------------
@@ -1064,6 +1248,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 -LiteralPath $MinusOneLog `
                 -Value "$setId`t$($mapsetDirectory.FullName)"
         }
+
 
         # ----------------------------------------------------
         # Handle SetID conflicts
@@ -1083,6 +1268,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 -Value "SELECTED=$setId`tIDS=$idsString`tPATH=$($mapsetDirectory.FullName)"
         }
 
+
         # ----------------------------------------------------
         # Output paths
         # ----------------------------------------------------
@@ -1094,6 +1280,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
         $largeOutput = Join-Path `
             $ThumbnailDirectory `
             "${setId}l.jpg"
+
 
         # ----------------------------------------------------
         # Determine cache state
@@ -1109,6 +1296,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
             $LargeWidth `
             $LargeHeight
 
+
         if ($Operation -eq 'Missing') {
 
             if ($smallValid -and $largeValid) {
@@ -1117,6 +1305,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 continue
             }
         }
+
 
         if ($Operation -eq 'Repair') {
 
@@ -1127,8 +1316,11 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
             }
         }
 
+
         # ----------------------------------------------------
         # Find background
+        #
+        # The lowest BeatmapID is used here.
         # ----------------------------------------------------
 
         $background = Find-MapsetBackground `
@@ -1146,6 +1338,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
             continue
         }
 
+
         # ----------------------------------------------------
         # Load source image
         # ----------------------------------------------------
@@ -1160,6 +1353,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 $background.Path
             )
 
+
             # ------------------------------------------------
             # Generate large thumbnail
             # ------------------------------------------------
@@ -1169,6 +1363,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 $LargeWidth `
                 $LargeHeight
 
+
             # ------------------------------------------------
             # Generate small thumbnail
             # ------------------------------------------------
@@ -1177,6 +1372,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 $sourceImage `
                 $SmallWidth `
                 $SmallHeight
+
 
             # ------------------------------------------------
             # Save according to operation
@@ -1196,6 +1392,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 }
             }
 
+
             if ($Operation -eq 'Repair') {
 
                 if ($smallValid) {
@@ -1207,6 +1404,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 }
             }
 
+
             if ($shouldWriteLarge) {
 
                 Save-JpegAtomic `
@@ -1215,6 +1413,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                     $JpegQuality
             }
 
+
             if ($shouldWriteSmall) {
 
                 Save-JpegAtomic `
@@ -1222,6 +1421,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                     $smallOutput `
                     $JpegQuality
             }
+
 
             # ------------------------------------------------
             # Verify generated files
@@ -1241,6 +1441,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
 
                 throw "Generated thumbnail failed verification."
             }
+
 
             if ($Operation -eq 'Repair' -and
                 (-not $smallValid -or -not $largeValid)) {
@@ -1291,6 +1492,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 }
             }
 
+
             if ($null -ne $largeBitmap) {
 
                 try {
@@ -1299,6 +1501,7 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
                 catch {
                 }
             }
+
 
             if ($null -ne $sourceImage) {
 
@@ -1328,9 +1531,15 @@ foreach ($mapsetDirectory in $mapsetDirectories) {
     }
 }
 
+
+# ------------------------------------------------------------
+# Finish progress
+# ------------------------------------------------------------
+
 Write-Progress `
     -Activity "Generating osu! thumbnails" `
     -Completed
+
 
 # ------------------------------------------------------------
 # Final statistics
@@ -1374,6 +1583,7 @@ Write-Host ""
 Write-Host "Logs:"
 Write-Host "  $LogDirectory"
 Write-Host ""
+
 
 # ------------------------------------------------------------
 # Log summary
@@ -1442,6 +1652,7 @@ Write-Host "Summary saved to:"
 Write-Host "  $summaryFile"
 Write-Host ""
 
+
 if ($Stats.Failed -gt 0) {
 
     Write-Host "There were errors." -ForegroundColor Yellow
@@ -1450,12 +1661,14 @@ if ($Stats.Failed -gt 0) {
     Write-Host ""
 }
 
+
 if ($Stats.NoSetId -gt 0) {
 
     Write-Host "Some mapsets had no valid BeatmapSetID." -ForegroundColor Yellow
     Write-Host "These cannot safely be written to Data\bt."
     Write-Host ""
 }
+
 
 if ($Stats.FolderNameIds -gt 0) {
 
@@ -1464,5 +1677,6 @@ if ($Stats.FolderNameIds -gt 0) {
     Write-Host "  $FolderIdLog"
     Write-Host ""
 }
+
 
 Write-Host "Done." -ForegroundColor Green
